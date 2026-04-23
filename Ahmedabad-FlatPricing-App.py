@@ -23,7 +23,7 @@ if len(csv_files) == 0:
     st.stop()
 
 file_path = os.path.join(DATA_PATH, csv_files[0])
-df_raw = pd.read_csv("data/ahmedabad.csv")
+df_raw = pd.read_csv("data/ahmedabad_cleaned.csv")
 
 
 st.subheader("Dataset Preview")
