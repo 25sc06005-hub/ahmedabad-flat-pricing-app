@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
-# import shap
 import matplotlib.pyplot as plt
 
 from model.predict import load_trained_model, make_prediction
@@ -10,29 +9,32 @@ from preprocessing import clean_data
 
 
 # ----------------------------
-# CONFIG
+# CONFIG 
 # ----------------------------
 st.set_page_config(page_title="Amdavad Estate Pro", layout="wide")
 
 
-
 # ----------------------------
-# LOAD RESOURCES
+# LOAD MODEL
 # ----------------------------
 @st.cache_resource
 def get_model():
     return load_trained_model()
 
+
+# ----------------------------
+# LOAD DATA
+# ----------------------------
 @st.cache_data
 def load_data():
     path = os.path.join("data", "ahmedabad_cleaned.csv")
     df = pd.read_csv(path)
-    return clean_data(df)
+    df = clean_data(df)
+    return df
+
 
 model = get_model()
 df = load_data()
-
-
 
 
 # ----------------------------
@@ -40,8 +42,6 @@ df = load_data()
 # ----------------------------
 st.title("🏙️ Amdavad Estate Pro")
 st.caption("AI-powered Real Estate Price Prediction System")
-
-
 
 
 # ----------------------------
@@ -52,8 +52,6 @@ st.sidebar.header("📍 Property Details")
 loc = st.sidebar.selectbox("Location", sorted(df["location"].unique()))
 sqft = st.sidebar.number_input("Area (Sqft)", 300, 10000, 1200)
 bhk = st.sidebar.slider("BHK", 1, 5, 2)
-
-
 
 
 # ----------------------------
@@ -85,8 +83,6 @@ if st.sidebar.button("Predict Price", type="primary"):
         st.error(f"Prediction failed: {e}")
 
 
-
-
 # ----------------------------
 # MARKET ANALYSIS
 # ----------------------------
@@ -110,71 +106,44 @@ fig = px.bar(
 
 st.plotly_chart(fig, use_container_width=True)
 
-
-
-
-# ----------------------------
-# SHAP EXPLAINABILITY
-# ----------------------------
-# st.write("---")
-# st.subheader("🧠 Model Explainability (SHAP)")
-
-
-# @st.cache_data
-# def compute_shap(_model, X_sample):
-#     X_transformed = _model.named_steps["prep"].transform(X_sample)
-
-#     if hasattr(X_transformed, "toarray"):
-#         X_transformed = X_transformed.toarray()
-
-#     explainer = shap.TreeExplainer(_model.named_steps["reg"])
-#     shap_values = explainer.shap_values(X_transformed)
-
-#     return X_transformed, shap_values
-
-
-# X_sample = df[["total_sqft", "bhk", "location"]].sample(200, random_state=42)
-
-# X_transformed, shap_values = compute_shap(model, X_sample)
-
-# fig = plt.figure()
-# shap.summary_plot(shap_values, X_transformed, show=False)
-
-# st.pyplot(fig)
-# plt.close()
-
-
-st.write("---")
-st.subheader("🧠 Model Explainability (Feature Importance)")
-
-# Get model components
-rf_model = model.named_steps["reg"]
-preprocessor = model.named_steps["prep"]
-
-# Get feature names after encoding
-cat_features = preprocessor.named_transformers_["cat"].get_feature_names_out(["location"])
-num_features = ["total_sqft", "bhk"]
-
-feature_names = list(num_features) + list(cat_features)
-
-# Get importances
-importances = pd.Series(rf_model.feature_importances_, index=feature_names)
-importances = importances.sort_values(ascending=True)
-
-# Plot
-fig = plt.figure()
-importances.tail(15).plot(kind="barh")
-st.pyplot(fig)
-plt.close()
-
-
-st.write("### 📊 Feature Importance Table")
-
-st.dataframe(
-    importances.sort_values(ascending=False)
-    .head(10)
-    .reset_index()
-    .rename(columns={"index": "Feature", 0: "Importance"})
+st.info(
+    "Insight: Location is the strongest predictor of price, followed by area (sqft) and BHK."
 )
 
 
+# ----------------------------
+# FEATURE IMPORTANCE (SAFE VERSION)
+# ----------------------------
+st.write("---")
+st.subheader("🧠 Model Explainability (Feature Importance)")
+
+try:
+    # safely access pipeline steps
+    steps = model.named_steps
+    preprocessor = steps[list(steps.keys())[0]]
+    rf_model = steps[list(steps.keys())[-1]]
+
+    # feature names
+    cat_features = preprocessor.named_transformers_["cat"].get_feature_names_out(["location"])
+    num_features = ["total_sqft", "bhk"]
+
+    feature_names = list(num_features) + list(cat_features)
+
+    importances = pd.Series(rf_model.feature_importances_, index=feature_names)
+    importances = importances.sort_values(ascending=True)
+
+    fig = plt.figure()
+    importances.tail(15).plot(kind="barh")
+    st.pyplot(fig)
+    plt.close()
+
+    st.write("### 📊 Top Features")
+    st.dataframe(
+        importances.sort_values(ascending=False)
+        .head(10)
+        .reset_index()
+        .rename(columns={"index": "Feature", 0: "Importance"})
+    )
+
+except Exception as e:
+    st.warning(f"Feature importance unavailable: {e}")
