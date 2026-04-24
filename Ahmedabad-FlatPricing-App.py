@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
-import shap
+# import shap
 import matplotlib.pyplot as plt
 
 from model.predict import load_trained_model, make_prediction
@@ -116,29 +116,65 @@ st.plotly_chart(fig, use_container_width=True)
 # ----------------------------
 # SHAP EXPLAINABILITY
 # ----------------------------
+# st.write("---")
+# st.subheader("🧠 Model Explainability (SHAP)")
+
+
+# @st.cache_data
+# def compute_shap(_model, X_sample):
+#     X_transformed = _model.named_steps["prep"].transform(X_sample)
+
+#     if hasattr(X_transformed, "toarray"):
+#         X_transformed = X_transformed.toarray()
+
+#     explainer = shap.TreeExplainer(_model.named_steps["reg"])
+#     shap_values = explainer.shap_values(X_transformed)
+
+#     return X_transformed, shap_values
+
+
+# X_sample = df[["total_sqft", "bhk", "location"]].sample(200, random_state=42)
+
+# X_transformed, shap_values = compute_shap(model, X_sample)
+
+# fig = plt.figure()
+# shap.summary_plot(shap_values, X_transformed, show=False)
+
+# st.pyplot(fig)
+# plt.close()
+
+
 st.write("---")
-st.subheader("🧠 Model Explainability (SHAP)")
+st.subheader("🧠 Model Explainability (Feature Importance)")
 
+# Get model components
+rf_model = model.named_steps["reg"]
+preprocessor = model.named_steps["prep"]
 
-@st.cache_data
-def compute_shap(_model, X_sample):
-    X_transformed = _model.named_steps["prep"].transform(X_sample)
+# Get feature names after encoding
+cat_features = preprocessor.named_transformers_["cat"].get_feature_names_out(["location"])
+num_features = ["total_sqft", "bhk"]
 
-    if hasattr(X_transformed, "toarray"):
-        X_transformed = X_transformed.toarray()
+feature_names = list(num_features) + list(cat_features)
 
-    explainer = shap.TreeExplainer(_model.named_steps["reg"])
-    shap_values = explainer.shap_values(X_transformed)
+# Get importances
+importances = pd.Series(rf_model.feature_importances_, index=feature_names)
+importances = importances.sort_values(ascending=True)
 
-    return X_transformed, shap_values
-
-
-X_sample = df[["total_sqft", "bhk", "location"]].sample(200, random_state=42)
-
-X_transformed, shap_values = compute_shap(model, X_sample)
-
+# Plot
 fig = plt.figure()
-shap.summary_plot(shap_values, X_transformed, show=False)
-
+importances.tail(15).plot(kind="barh")
 st.pyplot(fig)
 plt.close()
+
+
+st.write("### 📊 Feature Importance Table")
+
+st.dataframe(
+    importances.sort_values(ascending=False)
+    .head(10)
+    .reset_index()
+    .rename(columns={"index": "Feature", 0: "Importance"})
+)
+
+
