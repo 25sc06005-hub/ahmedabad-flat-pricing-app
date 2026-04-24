@@ -10,6 +10,9 @@ from sklearn.preprocessing import OneHotEncoder
 
 import streamlit as st
 
+
+
+
 # ----------------------------
 # CONFIG
 # ----------------------------
@@ -21,20 +24,25 @@ st.write("---")
 
 DATA_PATH = "data/ahmedabad_cleaned.csv"
 
+
 # ----------------------------
 # LOAD DATA
 # ----------------------------
 @st.cache_data
 def load_data():
-    return pd.read_csv(DATA_PATH)
+    df = pd.read_csv(DATA_PATH)
+
+    # CLEAN ONCE HERE (IMPORTANT)
+    df["location"] = df["location"].astype(str).fillna("Other")
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+    df["price_sqft"] = pd.to_numeric(df["price_sqft"], errors="coerce")
+
+    df = df.dropna()
+
+    return df
+
 
 df = load_data()
-
-# CLEANING (DO THIS FIRST)
-df["location"] = df["location"].replace("other", "Other").fillna("Other")
-df["price"] = pd.to_numeric(df["price"], errors="coerce")
-df["price_sqft"] = pd.to_numeric(df["price_sqft"], errors="coerce")
-df = df.dropna()
 
 df["price_segment"] = pd.qcut(df["price"], q=3, labels=["Low", "Mid", "High"])
 
@@ -46,11 +54,14 @@ st.dataframe(df.head())
 # FEATURES
 # ----------------------------
 TARGET = "price"
+
 y = df[TARGET]
 X = df.drop(columns=[TARGET])
 
 categorical_cols = ["location"]
-numeric_cols = [col for col in X.columns if col not in categorical_cols]
+numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+
+
 
 
 # ----------------------------
@@ -76,6 +87,7 @@ def train_model(X, y):
     model.fit(X, y)
     return model
 
+
 model = train_model(X, y)
 
 
@@ -88,19 +100,20 @@ def user_input():
     data = {}
 
     for col in numeric_cols:
-        data[col] = float(st.sidebar.slider(
+        data[col] = st.sidebar.slider(
             col,
             float(df[col].min()),
             float(df[col].max()),
             float(df[col].mean())
-        ))
+        )
 
-    data["location"] = str(st.sidebar.selectbox(
+    data["location"] = st.sidebar.selectbox(
         "location",
         sorted(df["location"].unique())
-    ))
+    )
 
     return pd.DataFrame([data])
+
 
 input_df = user_input()
 
@@ -114,6 +127,7 @@ prediction = model.predict(input_df)[0]
 
 st.subheader("🏷 Predicted Flat Price")
 st.success(f"₹ {prediction:,.2f} Lakhs")
+
 
 # ----------------------------
 # LOCATION HEATMAP
@@ -140,18 +154,14 @@ fig = px.bar(
     title="Top 30 Ahmedabad Locations by Average Price"
 )
 
-fig.update_layout(
-    xaxis_title="Location",
-    yaxis_title="Average Price (Lakhs)",
-    xaxis_tickangle=-45
-)
-
 st.plotly_chart(fig, use_container_width=True)
 
 
 
+
+
 # ----------------------------
-# FEATURE IMPORTANCE (FIXED)
+# FEATURE IMPORTANCE
 # ----------------------------
 st.write("---")
 st.subheader("📊 Feature Importance")
@@ -172,8 +182,13 @@ fig, ax = plt.subplots()
 importances.tail(15).plot(kind="barh", ax=ax)
 st.pyplot(fig)
 
+
+
+
+
+
 # ----------------------------
-# INSIGHT PANEL
+# INSIGHTS
 # ----------------------------
 st.write("---")
 st.subheader("🧠 Model Insights")
@@ -181,11 +196,12 @@ st.subheader("🧠 Model Insights")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.write("### Top Features")
+    st.write("Top Features")
     st.dataframe(importances.tail(10)[::-1])
 
 with col2:
-    st.info("Price is strongly influenced by location and sqft-based features.")
+    st.info("Price is mainly influenced by location and area (sqft-based features).")
+
 
 
 
@@ -223,13 +239,6 @@ fig = px.scatter(
 st.plotly_chart(fig, use_container_width=True)
 
 st.success(
-    f"Top Insight: Most expensive area is {area_stats.sort_values('avg_price', ascending=False).iloc[0]['location']}"
+    f"Top Insight: Most expensive area is "
+    f"{area_stats.sort_values('avg_price', ascending=False).iloc[0]['location']}"
 )
-
-st.subheader("🧠 AI Insights")
-
-st.write("### 🟢 Best Value Locations")
-st.dataframe(area_stats.sort_values("value_score", ascending=False).head(5)[["location","value_score","avg_price"]])
-
-st.write("### 🔴 Overpriced Locations")
-st.dataframe(area_stats.sort_values("value_score").head(5)[["location","value_score","avg_price"]])
