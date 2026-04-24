@@ -11,18 +11,9 @@ from sklearn.preprocessing import OneHotEncoder
 import streamlit as st
 
 # ----------------------------
-# CONFIG (ONLY ONCE)
+# CONFIG
 # ----------------------------
 st.set_page_config(page_title="Ahmedabad Flat Price Predictor", layout="wide")
-
-st.markdown("""
-<style>
-.big-font {
-    font-size:18px !important;
-    font-weight:600;
-}
-</style>
-""", unsafe_allow_html=True)
 
 st.title("🏠 Ahmedabad Flat Price Prediction App")
 st.write("ML-powered real estate analysis using Kaggle dataset")
@@ -39,14 +30,20 @@ def load_data():
 
 df = load_data()
 
+# CLEANING (DO THIS FIRST)
 df["location"] = df["location"].replace("other", "Other").fillna("Other")
+df["price"] = pd.to_numeric(df["price"], errors="coerce")
+df["price_sqft"] = pd.to_numeric(df["price_sqft"], errors="coerce")
+df = df.dropna()
+
 df["price_segment"] = pd.qcut(df["price"], q=3, labels=["Low", "Mid", "High"])
 
 st.subheader("📊 Dataset Preview")
 st.dataframe(df.head())
 
+
 # ----------------------------
-# TARGET
+# FEATURES
 # ----------------------------
 TARGET = "price"
 y = df[TARGET]
@@ -55,8 +52,9 @@ X = df.drop(columns=[TARGET])
 categorical_cols = ["location"]
 numeric_cols = [col for col in X.columns if col not in categorical_cols]
 
+
 # ----------------------------
-# PREPROCESSING + MODEL
+# MODEL PIPELINE
 # ----------------------------
 preprocessor = ColumnTransformer(
     transformers=[
@@ -80,6 +78,7 @@ def train_model(X, y):
 
 model = train_model(X, y)
 
+
 # ----------------------------
 # SIDEBAR INPUT
 # ----------------------------
@@ -89,21 +88,24 @@ def user_input():
     data = {}
 
     for col in numeric_cols:
-        data[col] = st.sidebar.slider(
+        data[col] = float(st.sidebar.slider(
             col,
-            float(X[col].min()),
-            float(X[col].max()),
-            float(X[col].mean())
-        )
+            float(df[col].min()),
+            float(df[col].max()),
+            float(df[col].mean())
+        ))
 
-    data["location"] = st.sidebar.selectbox(
+    data["location"] = str(st.sidebar.selectbox(
         "location",
         sorted(df["location"].unique())
-    )
+    ))
 
     return pd.DataFrame([data])
 
 input_df = user_input()
+
+
+
 
 # ----------------------------
 # PREDICTION
@@ -146,13 +148,16 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
+
+
 # ----------------------------
 # FEATURE IMPORTANCE (FIXED)
 # ----------------------------
 st.write("---")
 st.subheader("📊 Feature Importance")
 
-rf_model = model.named_steps["regressor"]
+rf = model.named_steps["regressor"]
+
 encoded_features = (
     numeric_cols +
     list(model.named_steps["preprocessor"]
@@ -160,7 +165,7 @@ encoded_features = (
          .get_feature_names_out(["location"]))
 )
 
-importances = pd.Series(rf_model.feature_importances_, index=encoded_features)
+importances = pd.Series(rf.feature_importances_, index=encoded_features)
 importances = importances.sort_values()
 
 fig, ax = plt.subplots()
@@ -180,7 +185,9 @@ with col1:
     st.dataframe(importances.tail(10)[::-1])
 
 with col2:
-    st.info("Price is strongly influenced by location and size-related features.")
+    st.info("Price is strongly influenced by location and sqft-based features.")
+
+
 
 # ----------------------------
 # REAL ESTATE INTELLIGENCE
